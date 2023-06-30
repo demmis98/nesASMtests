@@ -10,10 +10,10 @@ PPU_ADDR    =   $2006
 PPU_DATA    =   $2007
 OAM_DMA     =   $4014
 
-SQR1_VOL    =   $4000	; APU
+SQR1_VOLUME =   $4000	; APU
 SQR1_SWEEP  =   $4001
-SQR1_LO     =   $4002
-SQR1_HI     =   $4003
+SQR1_LOW    =   $4002
+SQR1_HIGH   =   $4003
 DMC_CONFIG  =   $4010
 CONTROLLER_1=   $4016
 APU_STATUS  =   $4015
@@ -64,7 +64,8 @@ BOARD_Y        =   $44
 BOARD_COUNT    =   $45
 
 MUSIC_MAX      =   $4a
-
+MUSIC_HIGH     =   $4c
+MUSIC_TEMP     =   $4d
 MUSIC_TIMER    =   $4e
 MUSIC_COUNT    =   $4f
 
@@ -285,13 +286,22 @@ enable_rendering:
  lda #%00011110
  sta PPU_MASK
 
+
 init_sound:
- lda #$01
+ lda #$01		;music n stuff
  sta APU_STATUS
- lda #$00
+ lda #%00000000
  sta SQR1_SWEEP
+ sta SQR1_VOLUME
  lda #$40
  sta APU_FRAMES
+
+ lda #%0010000
+ sta SQR1_HIGH
+ sta MUSIC_HIGH
+
+ lda #$03
+ sta MUSIC_MAX
 
 ;████████████████████████████████████████████████████████████████
 
@@ -304,10 +314,42 @@ process_music:
  inx
  cpx #$20
  bne @not_reset_timer
- ldx #$0
+ ldx #$00
+
+ lda MUSIC_HIGH
+ sta SQR1_HIGH
+
+ ldy MUSIC_COUNT
+ sty MUSIC_TEMP
+
+ lda TURN
+ cmp #$0d
+ beq @p2_turn
+ tya
+ clc
+ adc MUSIC_MAX
+ tay
+
+ @p2_turn:
+
+ lda music_notes, y
+ sta SQR1_LOW
+ lda music_volumes, y
+ sta SQR1_VOLUME
+
+ ldy MUSIC_TEMP
+
+ iny
+ cpy MUSIC_MAX
+ bne @not_reset_count
+ ldy #$00
+
+ @not_reset_count:
+ sty MUSIC_COUNT
 
  @not_reset_timer:
  stx MUSIC_TIMER
+
 
 ;████████████████████████████████████████████████████████████████
 
@@ -575,9 +617,20 @@ process_player_input:
 
 ;████████████████████████████████████████████████████████████████
 
+
  lda PRESS_BREAK
  cmp #$00
  bne @press_break
+
+ lda INPUT_1	;select and start buttons
+ and #%00110000
+ cmp #%00110000
+ bne @select_not_pressed
+ sta PRESS_BREAK
+ jmp @restart
+
+ @select_not_pressed:
+
  lda INPUT_1	;a button
  and #%10000000
  cmp #%10000000
@@ -586,6 +639,8 @@ process_player_input:
  lda BOARD_WIN
  cmp #$00
  beq @not_win
+
+ @restart:
 
  lda #$0a
  ldx #$00
@@ -773,8 +828,10 @@ palletes:
  .byte $0f, $04, $14, $24
  .byte $0f, $06, $16, $26
 
-music:
- .byte $a0, $b0
+music_notes:
+ .byte $fd, $c9, $a9, $e1, $a9, $86
+music_volumes:
+ .byte %00011000, %00011000, %00011000, %00011000, %00011000, %00011000
 
 ;████████████████████████████████████████████████████████████████
 
